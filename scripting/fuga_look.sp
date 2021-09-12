@@ -20,6 +20,7 @@ enum struct Look
 {
 	int index;
 	char item_name[128];
+	char item_name_ko[128];
 }
 
 enum struct Paint
@@ -154,27 +155,24 @@ public void OnConfigsExecuted()
 	{
 		do
 		{
-			char sidx[12], sItemName[128], sRealItemName[128];
+			char sidx[12], sItemName[128], sRealItemName[128], sRealItemNameKo[128];
 			int idx;
 			
 			kvItems.GetSectionName(sidx, sizeof(sidx));
 			idx = StringToInt(sidx);
 			
 			kvItems.GetString("name", sItemName, sizeof(sItemName), "");
-			LanguageServer_ResolveLocalizedString(GetLanguageByCode("ko"), sItemName, sRealItemName, 128);
-			
-			if(strlen(sRealItemName) <= 0)
-			{
-				LanguageServer_ResolveLocalizedString(GetLanguageByCode("en"), sItemName, sRealItemName, 128);
-			}
+			LanguageServer_ResolveLocalizedString(GetLanguageByCode("en"), sItemName, sRealItemName, 128);
+			LanguageServer_ResolveLocalizedString(GetLanguageByCode("ko"), sItemName, sRealItemNameKo, 128);
 			
 			Look look;			
 			look.index = idx;
 			look.item_name = sRealItemName;
+			look.item_name_ko = sRealItemNameKo;
 			
 			LookList.PushArray(look, sizeof(look));
 			
-			//PrintToServer("%s", look.item_name);
+			//PrintToServer("%s", look.item_name_ko);
 			
 			Format(sKey, 128, "%d_item_name", idx);
 			LookMap.SetString(sKey, sRealItemName);
@@ -396,7 +394,9 @@ public Action RandomLook(int client, int args)
 
 public Action LookMenu(int client, int args)
 {
-	char SearchWord[32], SearchValue, sIndex[12];
+	char SearchWord[32], SearchValue, sIndex[12], sItemName[128];
+	
+	int LanguageNum = GetClientLanguage(client);
 	
 	GetCmdArgString(SearchWord, sizeof(SearchWord));
 	Menu menu = CreateMenu(Slot_Select);
@@ -411,11 +411,11 @@ public Action LookMenu(int client, int args)
 	
 		IntToString(look.index, sIndex, 12);
 		
-		//PrintToServer("%s | %s", look.item_name, look.index);
+		sItemName = (strlen(look.item_name_ko) > 0 && LanguageNum == 15) ? look.item_name_ko : look.item_name;
 		
-		if(StrContains(look.item_name, SearchWord, false) > -1)
+		if(StrContains(sItemName, SearchWord, false) > -1)
 		{
-			AddMenuItem(menu, sIndex, look.item_name);
+			AddMenuItem(menu, sIndex, sItemName);
 			SearchValue++;
 		}
 	}
