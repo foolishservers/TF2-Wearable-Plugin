@@ -44,6 +44,22 @@ enum struct Wearable
 	}
 }
 
+enum struct MenuSlotInfo
+{
+	int Slot;
+	int Index;
+	bool IsRent;
+	
+	void Init()
+	{
+		this.Slot = -1;
+		this.Index = -1;
+		this.IsRent = false;
+	}
+}
+
+MenuSlotInfo SlotInfo[MAXPLAYERS+1];
+
 StringMap LookMap;
 int MaxItem_Look;
 
@@ -89,30 +105,6 @@ public void OnPluginStart()
 	{
 		OnClientPutInServer(i);
 	}
-}
-
-public void OnClientPutInServer(int client)
-{
-	for(int i = 0; i <= 2; i++)
-	{
-		StyleLook[client][i] = 0.0;
-	
-		for(int j = 0; j <= 9; j++)
-		{
-			GiveLook[client][i][j] = 0;
-			OriginalLook[client][i][j].Init();
-			PaintLook[client][i][j] = "";
-		}
-	}
-	
-	SettingReset[client] = false;
-}
-
-public void OnMapEnd()
-{
-	LookList.Clear();
-	LookMap.Clear();
-	PaintList.Clear();
 }
 
 public void OnConfigsExecuted()
@@ -198,6 +190,513 @@ public void OnConfigsExecuted()
 	LogMessage("Paint Max Item : %d", MaxItem_Paint);
 }
 
+public void OnMapEnd()
+{
+	LookList.Clear();
+	LookMap.Clear();
+	PaintList.Clear();
+}
+
+public void OnClientPutInServer(int client)
+{
+	for(int i = 0; i <= 2; i++)
+	{
+		StyleLook[client][i] = 0.0;
+	
+		for(int j = 0; j <= 9; j++)
+		{
+			GiveLook[client][i][j] = 0;
+			OriginalLook[client][i][j].Init();
+			PaintLook[client][i][j] = "";
+		}
+	}
+	
+	SlotInfo[client].Init();
+	
+	SettingReset[client] = false;
+}
+
+public Action LookMenu(int client, int args)
+{
+	Menu menu = new Menu(Slot_Select);
+	
+	menu.SetTitle("룩 대여\n현재 착용 중인 장식");	
+	
+	for(int i = 0; i < 3; i++)
+	{
+		int id;
+		char info[64], hatName[64];
+
+		if(OriginalLook[client][i][GCLASS].RentalIndex <= 0)
+		{
+			id = OriginalLook[client][i][GCLASS].Index;
+			
+			if(id)
+			{
+				TF2Econ_GetItemName(id, hatName, sizeof(hatName));
+				Format(info, sizeof(info), "%d;%d;%d", i, id, 0);
+				menu.AddItem(info, hatName);
+			}
+			else
+			{
+				Format(info, sizeof(info), "%d;%d;%d", i, 0, 0);
+				menu.AddItem(info, "- 비어 있음 -");
+			}
+		}
+		else
+		{
+			id = OriginalLook[client][i][GCLASS].RentalIndex;
+			TF2Econ_GetItemName(id, hatName, sizeof(hatName));
+			Format(hatName, sizeof(hatName), "%s [대여중]", hatName);
+			Format(info, sizeof(info), "%d;%d;%d", i, id, 1);
+			menu.AddItem(info, hatName);
+		}
+	}
+ 
+	menu.ExitButton = true;
+	
+	menu.Display(client, MENU_TIME_FOREVER);
+	
+	return Plugin_Handled;
+}
+
+public Slot_Select(Menu previousMenu, MenuAction action, int client, int select)
+{
+	switch(action)
+	{
+		case MenuAction_Select :
+		{
+			Menu menu = CreateMenu(Slot_Setting);
+		
+			char info[64], infoSplit[3][16], hatName[64];
+		
+			GetMenuItem(previousMenu, select, info, sizeof(info));
+		
+			ExplodeString(info, ";", infoSplit, sizeof(infoSplit), sizeof(infoSplit[]));
+		
+			int slot = StringToInt(infoSplit[0]);
+			int id = StringToInt(infoSplit[1]);
+			bool isRent = (StringToInt(infoSplit[2]) > 0);
+		
+			PrintToChat(client, "Slot Select %d %d %d", slot, id, isRent);
+		
+			if(id > 0)
+			{
+				TF2Econ_GetItemName(id, hatName, sizeof(hatName));
+				if(!isRent) menu.SetTitle("\"%s\" 장식 설정", hatName);
+				else menu.SetTitle("\"%s [대여중]\" 장식 설정", hatName);
+			}
+			else
+			{
+				menu.SetTitle("\"-비어 있음-\" 장식 설정", hatName);
+			}
+			
+			menu.AddItem(info, "대여");
+			menu.AddItem(info, "언유");
+			menu.AddItem(info, "페인트");
+		
+			if(isRent) menu.AddItem(info, "삭제");
+			else menu.AddItem(info, "삭제", ITEMDRAW_DISABLED);
+		
+			menu.ExitBackButton = true;
+		
+			menu.Display(client, MENU_TIME_FOREVER);
+		}
+		case MenuAction_End : 
+		{
+			CloseHandle(previousMenu);
+		}
+	}
+}
+
+public Slot_Setting(Menu previousMenu, MenuAction action, int client, int select)
+{
+	switch(action)
+	{
+		case MenuAction_Select :
+		{
+			char info[64], infoSplit[3][16];
+			
+			GetMenuItem(previousMenu, select, info, sizeof(info));
+			
+			ExplodeString(info, ";", infoSplit, sizeof(infoSplit), sizeof(infoSplit[]));
+			
+			int slot = StringToInt(infoSplit[0]);
+			int id = StringToInt(infoSplit[1]);
+			bool isRent = (StringToInt(infoSplit[2]) > 0);
+			
+			SlotInfo[client].Slot = slot;
+			SlotInfo[client].Index = id;
+			SlotInfo[client].IsRent = isRent;
+			
+			PrintToChat(client, "slot setting %d %d %d", SlotInfo[client].Slot, SlotInfo[client].Index, SlotInfo[client].IsRent);
+		
+			switch(select)
+			{
+				case 0 :
+				{
+					Look_Search(client);
+				}
+				case 1 :
+				{
+				}
+				case 2 :
+				{
+				}
+				case 3 :
+				{
+					PrintToChat(client, "재보급시, 해당 장식이 해제됩니다.");
+					OriginalLook[client][slot][GCLASS].RentalIndex = 0;
+					GiveLook[client][slot][GCLASS] = 0;
+				}
+			}
+		}
+		case MenuAction_Cancel :
+		{
+			PrintToChat(client, "ㄻㄴㄹ");
+			if(select == MenuCancel_ExitBack)
+			{
+				PrintToChat(client, "ㄻㄴㄹ");
+				previousMenu.Display(client, MENU_TIME_FOREVER);
+			}
+		}
+		case MenuAction_End : 
+		{
+			CloseHandle(previousMenu);
+		}
+	}
+}
+
+public void Look_Search(int client)
+{
+	char SearchWord[32], SearchValue, sIndex[12], sItemName[128];
+	
+	int LanguageNum = GetClientLanguage(client);
+	
+	GetCmdArgString(SearchWord, sizeof(SearchWord));
+	Menu menu = new Menu(Look_Select);
+
+	menu.SetTitle("옷 고르삼\n \n!룩 <검색> | !look <search>", client);
+	
+	for(int i = 0 ; i < MaxItem_Look ; i++)
+	{
+		Look look;
+		LookList.GetArray(i, look, sizeof(look));
+	
+		IntToString(look.index, sIndex, 12);
+		
+		sItemName = (strlen(look.item_name_ko) > 0 && LanguageNum == 15) ? look.item_name_ko : look.item_name;
+		
+		if(StrContains(sItemName, SearchWord, false) > -1)
+		{
+			menu.AddItem(sIndex, sItemName);
+			SearchValue++;
+		}
+	}
+	
+	if(!SearchValue) PrintToChat(client, "%s\x03이름이 잘못되었거나 없는 이름입니다.",FUCCA);
+	
+	menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public Look_Select(Menu menu, MenuAction action, int client, int select)
+{
+	if(action == MenuAction_Select)
+	{		
+		char info[32];
+		GetMenuItem(menu, select, info, sizeof(info));
+		
+		int index = StringToInt(info);
+		bool isDuplicated = false;
+		
+		int slot = SlotInfo[client].Slot;
+		
+		for(int i = 0; i < 3; i++)
+		{
+			if(	OriginalLook[client][i][GCLASS].Index == index ||
+				OriginalLook[client][i][GCLASS].RentalIndex == index ||
+				GiveLook[client][i][GCLASS] == index)
+			{
+				isDuplicated = true;
+			}
+		}
+		
+		if(isDuplicated)
+		{
+			PrintToChat(client, "중복해서 장식을 착용할 수 없습니다.");
+		}
+		else
+		{
+			PrintToChat(client, "재보급시, 해당 장식이 착용됩니다.");
+			OriginalLook[client][slot][GCLASS].RentalIndex = index;
+			GiveLook[client][slot][GCLASS] = index;
+		}
+	}
+	else if(action == MenuAction_End) CloseHandle(menu);
+}
+
+// ------------------------------------ 리젠 되었을때 ------------------------------------ //
+
+public Action inven(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(GetEventInt(event, "userid"));
+	
+	PrintToChat(client, "%d %d %d", GiveLook[client][0][GCLASS], GiveLook[client][1][GCLASS], GiveLook[client][2][GCLASS]);
+	
+	if(OriginalLook[client][0][GCLASS].IsEmpty())
+	{
+		PrintToChat(client,"첫 등록");
+		InitOriginalLook(client);
+	}
+	else
+	{
+		PrintToChat(client,"정보 있음");
+		if(IsOriginalLookNeedUpdate(client))
+		{
+			PrintToChat(client,"로드아웃 장식이 변경되어 장식 대여 설정이 초기화 됩니다");
+			InitOriginalLook(client);
+		}
+	}
+	
+	for(int i = 0; i < 3; i++)
+	{
+		if(GiveLook[client][i][GCLASS] != 0)
+		{
+			RemoveHat(client, GiveLook[client][i][GCLASS]);
+			TF2Item_GiveWearable(client, GiveLook[client][i][GCLASS], PaintLook[client][i][GCLASS], StyleLook[client][i]);
+		}
+	}
+}
+
+/*
+public Action TF2Items_OnGiveNamedItem(int client, char[] szClassName, int index, Handle &hItem)
+{
+	return Plugin_Continue;   
+}
+*/
+
+void InitOriginalLook(int client)
+{
+	int hat = -1, slot = 0;
+	
+	for(slot = 0; slot < 3; slot++)
+	{
+		OriginalLook[client][slot][GCLASS].Init();
+	}
+	
+	slot = 0;
+	
+	while ((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) 
+	{
+		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client))
+		{
+			int id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
+			
+			if (!IsWearableWeapon(id) && OriginalLook[client][slot][GCLASS].IsEmpty()) 
+			{
+				OriginalLook[client][slot][GCLASS].Index = id;	
+				
+				if(slot < 3)
+				{
+					slot++;
+				}
+			}
+		}
+	}
+	
+	slot = 0;
+	
+	for(slot = 0; slot < 3; slot++)
+	{
+		if(OriginalLook[client][slot][GCLASS].IsEmpty()) 
+		{
+			OriginalLook[client][slot][GCLASS].Index = 0;
+		}
+	}
+	
+	PrintToChat(client, "초기화 %d %d %d", OriginalLook[client][0][GCLASS], OriginalLook[client][1][GCLASS], OriginalLook[client][2][GCLASS]);
+}
+
+bool IsOriginalLookNeedUpdate(int client)
+{
+	int OldHatCount = 0, HatCount = 0;
+	bool IsNeedUpdate[3] = {true, true, true};
+	
+	for(int slot = 0; slot < 3; slot++)
+	{
+		if(OriginalLook[client][slot][GCLASS].Index != 0)
+		{
+			OldHatCount++;
+		}
+	}
+	
+	int hat = -1, id = -1;
+	while((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) 
+	{
+		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client))
+		{
+			id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
+			
+			if(!IsWearableWeapon(id))
+			{
+				if(OriginalLook[client][0][GCLASS].Index == id)
+				{
+					IsNeedUpdate[0] = false;
+				}
+			
+				if(OriginalLook[client][1][GCLASS].Index == id)
+				{
+					IsNeedUpdate[1] = false;
+				}
+			
+				if(OriginalLook[client][2][GCLASS].Index == id)
+				{
+					IsNeedUpdate[2] = false;
+				}
+				
+				HatCount++;
+			}
+		}
+	}
+	
+	PrintToChat(client, "IsNeedUpdate %d %d %d", IsNeedUpdate[0], IsNeedUpdate[1], IsNeedUpdate[2]);
+	PrintToChat(client, "Old %d New %d ", OldHatCount, HatCount);
+	
+	if(OldHatCount != HatCount)
+	{
+		return true;
+	}
+	
+	for(int slot = 0; slot < 3;  slot++)
+	{
+		if(IsNeedUpdate[slot] && OriginalLook[client][slot][GCLASS].Index != 0)
+		{
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+stock bool TF2Item_GiveWearable(int client, int index, char[] att, float att2)
+{
+	Handle item = TF2Items_CreateItem(OVERRIDE_ALL | FORCE_GENERATION);
+	
+	if(index != 1067) TF2Items_SetClassname(item, "tf_wearable");
+	else  TF2Items_SetClassname(item, "tf_wearable_levelable_item");
+	
+	TF2Items_SetItemIndex(item, index);
+	//TF2Items_SetQuality(item, 6);
+	//TF2Items_SetLevel(item, 1);
+	
+	int wearable = TF2Items_GiveNamedItem(client, item);
+	
+	if(!StrEqual(att, "")) SetPaint(wearable, att);
+	if(att2 != 0.0) Style(wearable, att2);
+	
+	SetEntProp(wearable, Prop_Send, "m_bValidatedAttachedEntity", 1);
+	
+	delete item;
+	
+	TF2_EquipPlayerWearable(client, wearable);
+}
+
+stock void RemoveHat(int client, int index)
+{
+	int slot = 0;
+	for(slot = 0; slot < 3; slot++)
+	{
+		if(OriginalLook[client][slot][GCLASS].RentalIndex == index)
+		{
+			break;
+		}
+	}
+	
+	int hat = -1;
+	while ((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) {
+		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client)) {
+			int id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
+			
+			if (id == OriginalLook[client][slot][GCLASS].Index)
+			{
+				AcceptEntityInput(hat, "Kill");
+			}
+		}
+	}
+}
+
+stock void AttAtt(int entity, char[] att)
+{
+	char atts[32][32]; 
+	int count = ExplodeString(att, " ; ", atts, 32, 32);
+	
+	if (count > 1) for (int i = 0;  i < count;  i+= 2) TF2Attrib_SetByDefIndex(entity, StringToInt(atts[i]), StringToFloat(atts[i+1]));
+}
+
+stock void SetPaint(int entity, char[] att)
+{
+	TF2Attrib_RemoveByDefIndex(entity, 1004);
+	TF2Attrib_RemoveByDefIndex(entity, 142);
+	TF2Attrib_RemoveByDefIndex(entity, 261);
+	
+	float paint = StringToFloat(att);
+	
+	if(paint <= 5.0 && paint >= 0.0) TF2Attrib_SetByDefIndex(entity, 1004, paint);
+	else
+	{
+		char aa[3][32]; 
+		ExplodeString(att, " ", aa, 3, 32);
+		
+		if(StrEqual(aa[0], "m"))
+		{
+			TF2Attrib_SetByDefIndex(entity, 142, StringToFloat(aa[1]));
+			TF2Attrib_SetByDefIndex(entity, 261, StringToFloat(aa[2]));
+		}
+		else TF2Attrib_SetByDefIndex(entity, 142, paint);
+	}
+}
+
+stock void Style(int entity, float att)
+{
+	TF2Attrib_RemoveByDefIndex(entity, 542);
+	TF2Attrib_SetByDefIndex(entity, 542, att);
+}
+
+stock bool IsWearableWeapon(int id)
+{
+	switch (id) {
+		case 133, 444, 405, 608, 231, 642:
+			return true;
+	}
+	return false;
+}
+
+stock bool AliveCheck(int client)
+{
+	if(client > 0 && client <= MaxClients)
+		if(IsClientConnected(client) == true)
+			if(IsClientInGame(client) == true)
+				if(IsPlayerAlive(client) == true) return true;
+				else return false;
+			else return false;
+		else return false;
+	else return false;
+}
+
+stock bool IsValidClient(int client)
+{
+	if(client <= 0 ) return false;
+	if(client > MaxClients) return false;
+	if(!IsClientConnected(client)) return false;
+	return IsClientInGame(client);
+}
+
+// ------------------------------------ 리팩토링 필요 ------------------------------------ //
+stock void Fucca_ReplyToCommand(client, String:say[])
+{ 
+	ReplyToCommand(client, "%s\x07FFFFFF%s", FUCCA, say);
+}
+
 public Action SettingCommand(int client, int args)
 {
 	Menu menu = CreateMenu(Setting_Select);
@@ -278,140 +777,6 @@ public Action ResetCommand2(int client, int args)
 	}
 		
 	return Plugin_Handled;
-}
-
-public Action LookMenu(int client, int args)
-{
-	char SearchWord[32], SearchValue, sIndex[12], sItemName[128];
-	
-	int LanguageNum = GetClientLanguage(client);
-	
-	GetCmdArgString(SearchWord, sizeof(SearchWord));
-	Menu menu = CreateMenu(Slot_Select);
-
-	SetMenuTitle(menu, "옷 고르삼\n \n!룩 <검색> | !look <search>", client);
-	AddMenuItem(menu, "0", "삭제");
-	
-	for(int i = 0 ; i < MaxItem_Look ; i++)
-	{
-		Look look;
-		LookList.GetArray(i, look, sizeof(look));
-	
-		IntToString(look.index, sIndex, 12);
-		
-		sItemName = (strlen(look.item_name_ko) > 0 && LanguageNum == 15) ? look.item_name_ko : look.item_name;
-		
-		if(StrContains(sItemName, SearchWord, false) > -1)
-		{
-			AddMenuItem(menu, sIndex, sItemName);
-			SearchValue++;
-		}
-	}
-	
-	if(!SearchValue) PrintToChat(client, "%s\x03이름이 잘못되었거나 없는 이름입니다.",FUCCA);
-	
-	DisplayMenu(menu, client, 60);
-	
-	return Plugin_Handled;
-}
-
-public Slot_Select(Menu menu, MenuAction action, int client, int select)
-{
-	if(action == MenuAction_Select)
-	{
-		char info[10];
-		GetMenuItem(menu, select, info, sizeof(info));
-		ItemSlot(client, info);
-	}
-	else if(action == MenuAction_End) CloseHandle(menu);
-}
-
-public void ItemSlot(int client, char[] index)
-{
-	Menu info = CreateMenu(Look_Select);
-	SetMenuTitle(info, "로드아웃 차례대로 슬롯 고르삼");	
-	
-	for(int i = 0; i < 3; i++)
-	{
-		int id;
-		char idStr[12], hatName[42];
-
-		if(OriginalLook[client][i][GCLASS].RentalIndex <= 0)
-		{
-			id = OriginalLook[client][i][GCLASS].Index;
-			
-			if(id)
-			{
-				PrintToChat(client, "%d", id);
-				IntToString(id, idStr, sizeof(idStr));
-				TF2Econ_GetItemName(id, hatName, sizeof(hatName));
-				info.AddItem(index, hatName);
-			}
-			else
-			{
-				info.AddItem(index, "- 비어 있음 -");
-			}
-		}
-		else
-		{
-			id = OriginalLook[client][i][GCLASS].RentalIndex;
-			IntToString(id, idStr, sizeof(idStr));
-			TF2Econ_GetItemName(id, hatName, sizeof(hatName));
-			info.AddItem(index, hatName);
-		}
-	}
-	
-	/*
-	AddMenuItem(info, index, "모자 슬롯"); 
-	AddMenuItem(info, index, "장식 슬롯"); 
-	AddMenuItem(info, index, "장식 슬롯 2"); 
-	*/
- 
-	SetMenuExitButton(info, true);
-	DisplayMenu(info, client, MENU_TIME_FOREVER);
-} 
-
-public Look_Select(Menu menu, MenuAction action, int client, int select)
-{
-	if(action == MenuAction_Select)
-	{		
-		char info[32];
-		GetMenuItem(menu, select, info, sizeof(info));
-		
-		int index = StringToInt(info);
-		bool isDuplicated = false;
-		
-		if(index > 0)
-		{
-			for(int slot = 0; slot < 3; slot++)
-			{
-				if(	OriginalLook[client][slot][GCLASS].Index == index ||
-					OriginalLook[client][slot][GCLASS].RentalIndex == index ||
-					GiveLook[client][slot][GCLASS])
-				{
-					isDuplicated = true;
-				}
-			}
-		
-			if(isDuplicated)
-			{
-				PrintToChat(client, "중복해서 장식을 착용할 수 없습니다.");
-			}
-			else
-			{
-				PrintToChat(client, "재보급시, 해당 장식이 착용됩니다.");
-				OriginalLook[client][select][GCLASS].RentalIndex = index;
-				GiveLook[client][select][GCLASS] = index;
-			}
-		}
-		else
-		{
-			PrintToChat(client, "재보급시, 해당 장식이 해제됩니다.");
-			OriginalLook[client][select][GCLASS].RentalIndex = index;
-			GiveLook[client][select][GCLASS] = index;
-		}
-	}
-	else if(action == MenuAction_End) CloseHandle(menu);
 }
 
 public Action PaintMenu(int client, int args)
@@ -517,265 +882,4 @@ public Action StyleMenu(int client, int args)
 	PrintToChat(client, "%s\x04스타일은 적용이 안될 수 있습니다.", FUCCA);
 	
 	return Plugin_Handled;
-}
-
-// ------------------------------------ 리젠 되었을때 ------------------------------------ //
-
-public Action inven(Event event, const char[] name, bool dontBroadcast)
-{
-	int client = GetClientOfUserId(GetEventInt(event, "userid"));
-	
-	PrintToChat(client, "%d %d %d", GiveLook[client][0][GCLASS], GiveLook[client][1][GCLASS], GiveLook[client][2][GCLASS]);
-	
-	if(OriginalLook[client][0][GCLASS].IsEmpty())
-	{
-		PrintToChat(client,"첫 등록");
-		InitOriginalLook(client);
-	}
-	else
-	{
-		PrintToChat(client,"정보 있음");
-		if(IsOriginalLookNeedUpdate(client))
-		{
-			PrintToChat(client,"로드아웃 장식이 변경되어 장식 대여 설정이 초기화 됩니다");
-			InitOriginalLook(client);
-		}
-	}
-	
-	for(int i = 0; i < 3; i++)
-	{
-		if(GiveLook[client][i][GCLASS] != 0)
-		{
-			RemoveHat(client, GiveLook[client][i][GCLASS]);
-			TF2Item_GiveWearable(client, GiveLook[client][i][GCLASS], PaintLook[client][i][GCLASS], StyleLook[client][i]);
-		}
-	}
-}
-
-/*
-public Action TF2Items_OnGiveNamedItem(int client, char[] szClassName, int index, Handle &hItem)
-{
-	return Plugin_Continue;   
-}
-*/
-
-stock bool TF2Item_GiveWearable(int client, int index, char[] att, float att2)
-{
-	Handle item = TF2Items_CreateItem(OVERRIDE_ALL | FORCE_GENERATION);
-	
-	if(index != 1067) TF2Items_SetClassname(item, "tf_wearable");
-	else  TF2Items_SetClassname(item, "tf_wearable_levelable_item");
-	
-	TF2Items_SetItemIndex(item, index);
-	//TF2Items_SetQuality(item, 6);
-	//TF2Items_SetLevel(item, 1);
-	
-	int wearable = TF2Items_GiveNamedItem(client, item);
-	
-	if(!StrEqual(att, "")) SetPaint(wearable, att);
-	if(att2 != 0.0) Style(wearable, att2);
-	
-	SetEntProp(wearable, Prop_Send, "m_bValidatedAttachedEntity", 1);
-	
-	delete item;
-	
-	TF2_EquipPlayerWearable(client, wearable);
-}
-
-stock void RemoveHat(int client, int index)
-{
-	int slot = 0;
-	for(slot = 0; slot < 3; slot++)
-	{
-		if(OriginalLook[client][slot][GCLASS].RentalIndex == index)
-		{
-			break;
-		}
-	}
-	
-	int hat = -1;
-	while ((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) {
-		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client)) {
-			int id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
-			
-			if (id == OriginalLook[client][slot][GCLASS].Index)
-			{
-				AcceptEntityInput(hat, "Kill");
-			}
-		}
-	}
-}
-
-stock void AttAtt(int entity, char[] att)
-{
-	char atts[32][32]; 
-	int count = ExplodeString(att, " ; ", atts, 32, 32);
-	
-	if (count > 1) for (int i = 0;  i < count;  i+= 2) TF2Attrib_SetByDefIndex(entity, StringToInt(atts[i]), StringToFloat(atts[i+1]));
-}
-
-void SetPaint(int entity, char[] att)
-{
-	TF2Attrib_RemoveByDefIndex(entity, 1004);
-	TF2Attrib_RemoveByDefIndex(entity, 142);
-	TF2Attrib_RemoveByDefIndex(entity, 261);
-	
-	float paint = StringToFloat(att);
-	
-	if(paint <= 5.0 && paint >= 0.0) TF2Attrib_SetByDefIndex(entity, 1004, paint);
-	else
-	{
-		char aa[3][32]; 
-		ExplodeString(att, " ", aa, 3, 32);
-		
-		if(StrEqual(aa[0], "m"))
-		{
-			TF2Attrib_SetByDefIndex(entity, 142, StringToFloat(aa[1]));
-			TF2Attrib_SetByDefIndex(entity, 261, StringToFloat(aa[2]));
-		}
-		else TF2Attrib_SetByDefIndex(entity, 142, paint);
-	}
-}
-
-stock void Style(int entity, float att)
-{
-	TF2Attrib_RemoveByDefIndex(entity, 542);
-	TF2Attrib_SetByDefIndex(entity, 542, att);
-}
-
-stock void Fucca_ReplyToCommand(client, String:say[])
-{ 
-	ReplyToCommand(client, "%s\x07FFFFFF%s", FUCCA, say);
-}
-
-public bool AliveCheck(int client)
-{
-	if(client > 0 && client <= MaxClients)
-		if(IsClientConnected(client) == true)
-			if(IsClientInGame(client) == true)
-				if(IsPlayerAlive(client) == true) return true;
-				else return false;
-			else return false;
-		else return false;
-	else return false;
-}
-
-stock bool IsValidClient(int client)
-{
-	if(client <= 0 ) return false;
-	if(client > MaxClients) return false;
-	if(!IsClientConnected(client)) return false;
-	return IsClientInGame(client);
-}
-
-void InitOriginalLook(int client)
-{
-	int hat = -1, slot = 0;
-	
-	for(slot = 0; slot < 3; slot++)
-	{
-		OriginalLook[client][slot][GCLASS].Init();
-	}
-	
-	slot = 0;
-	
-	while ((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) 
-	{
-		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client))
-		{
-			int id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
-			
-			if (!IsWearableWeapon(id) && OriginalLook[client][slot][GCLASS].IsEmpty()) 
-			{
-				OriginalLook[client][slot][GCLASS].Index = id;	
-				
-				if(slot < 3)
-				{
-					slot++;
-				}
-			}
-		}
-	}
-	
-	slot = 0;
-	
-	for(slot = 0; slot < 3; slot++)
-	{
-		if(OriginalLook[client][slot][GCLASS].IsEmpty()) 
-		{
-			OriginalLook[client][slot][GCLASS].Index = 0;
-		}
-	}
-	
-	PrintToChat(client, "초기화 %d %d %d", OriginalLook[client][0][GCLASS], OriginalLook[client][1][GCLASS], OriginalLook[client][2][GCLASS]);
-}
-
-bool IsOriginalLookNeedUpdate(int client)
-{
-	int OldHatCount = 0, HatCount = 0;
-	bool IsNeedUpdate[3] = {true, true, true};
-	
-	for(int slot = 0; slot < 3; slot++)
-	{
-		if(OriginalLook[client][slot][GCLASS].Index != 0)
-		{
-			OldHatCount++;
-		}
-	}
-	
-	int hat = -1, id = -1;
-	while((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) 
-	{
-		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client))
-		{
-			id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
-			
-			if(!IsWearableWeapon(id))
-			{
-				if(OriginalLook[client][0][GCLASS].Index == id)
-				{
-					IsNeedUpdate[0] = false;
-				}
-			
-				if(OriginalLook[client][1][GCLASS].Index == id)
-				{
-					IsNeedUpdate[1] = false;
-				}
-			
-				if(OriginalLook[client][2][GCLASS].Index == id)
-				{
-					IsNeedUpdate[2] = false;
-				}
-				
-				HatCount++;
-			}
-		}
-	}
-	
-	PrintToChat(client, "IsNeedUpdate %d %d %d", IsNeedUpdate[0], IsNeedUpdate[1], IsNeedUpdate[2]);
-	PrintToChat(client, "Old %d New %d ", OldHatCount, HatCount);
-	
-	if(OldHatCount != HatCount)
-	{
-		return true;
-	}
-	
-	for(int slot = 0; slot < 3;  slot++)
-	{
-		if(IsNeedUpdate[slot] && OriginalLook[client][slot][GCLASS].Index != 0)
-		{
-			return true;
-		}
-	}
-	
-	return false;
-}
-
-bool IsWearableWeapon(int id)
-{
-	switch (id) {
-		case 133, 444, 405, 608, 231, 642:
-			return true;
-	}
-	return false;
 }
