@@ -114,6 +114,9 @@ public void OnPluginStart()
 	LookMap = new StringMap();
 	PaintList = new ArrayList(sizeof(Paint));
 	
+	RegConsoleCmd("say", Command_ItemSearch);
+	RegConsoleCmd("say_team", Command_ItemSearch);
+	 
 	RegConsoleCmd("sm_look", LookMenu);
 	RegConsoleCmd("sm_paint", PaintMenu);
 	RegConsoleCmd("sm_style", StyleMenu);
@@ -331,8 +334,8 @@ public Slot_Select(Menu previousMenu, MenuAction action, int client, int select)
 			}
 			
 			menu.AddItem(sInfo, "대여");
-			menu.AddItem(sInfo, "언유");
-			menu.AddItem(sInfo, "페인트");
+			menu.AddItem(sInfo, "언유", ITEMDRAW_DISABLED);
+			menu.AddItem(sInfo, "페인트", ITEMDRAW_DISABLED);
 		
 			if(isRent) menu.AddItem(sInfo, "삭제");
 			else menu.AddItem(sInfo, "삭제", ITEMDRAW_DISABLED);
@@ -374,7 +377,7 @@ public Slot_Setting(Menu previousMenu, MenuAction action, int client, int select
 			{
 				case 0 :
 				{
-					Look_Search(client);
+					Look_Search(client, "");
 				}
 				case 1 :
 				{
@@ -398,6 +401,7 @@ public Slot_Setting(Menu previousMenu, MenuAction action, int client, int select
 				PrintToChat(client, "ㄻㄴㄹ");
 				previousMenu.Display(client, MENU_TIME_FOREVER);
 			}
+			SlotInfo[client].Init();
 		}
 		case MenuAction_End : 
 		{
@@ -406,14 +410,34 @@ public Slot_Setting(Menu previousMenu, MenuAction action, int client, int select
 	}
 }
 
-public void Look_Search(int client)
+public Action Command_ItemSearch(int client, int args)
+{
+	if(SlotInfo[client].Slot > -1)
+	{
+		char sSearch[256];
+		
+		GetCmdArgString(sSearch, sizeof(sSearch));
+		
+		ReplaceString(sSearch, sizeof(sSearch), "\"", "", false);
+		
+		PrintToChat(client, "%s", sSearch);
+		
+		Look_Search(client, sSearch);
+		
+		return Plugin_Handled;
+	}
+
+	return Plugin_Continue;
+}
+
+public void Look_Search(int client, char[] searchWord)
 {
 	char SearchWord[32], SearchValue, sIndex[12], sItemName[128];
 	
 	GetCmdArgString(SearchWord, sizeof(SearchWord));
 	Menu menu = new Menu(Look_Select);
 
-	menu.SetTitle("옷 고르삼\n \n!룩 <검색> | !look <search>", client);
+	menu.SetTitle("대여 장식 검색\n채팅에 장식 이름 입력", client);
 	
 	for(int i = 0 ; i < MaxItem_Look ; i++)
 	{
@@ -424,52 +448,100 @@ public void Look_Search(int client)
 		
 		Format(sItemName, sizeof(sItemName), "%t", look.item_name); 
 		
-		if(StrContains(sItemName, SearchWord, false) > -1)
+		if(StrContains(sItemName, searchWord, false) > -1)
 		{
 			menu.AddItem(sIndex, sItemName);
 			SearchValue++;
 		}
 	}
 	
-	if(!SearchValue) PrintToChat(client, "%s\x03이름이 잘못되었거나 없는 이름입니다.",FUCCA);
+	if(!SearchValue)
+	{
+		char sNoSearch[256];
+		Format(sNoSearch, sizeof(sNoSearch), "\"%s\" 단어가 포함된 장식이 없습니다.", searchWord); 
+		menu.AddItem("0", sNoSearch, ITEMDRAW_DISABLED);
+	}
 	
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
 public Look_Select(Menu menu, MenuAction action, int client, int select)
 {
-	if(action == MenuAction_Select)
-	{		
-		char info[32];
-		GetMenuItem(menu, select, info, sizeof(info));
-		
-		int index = StringToInt(info);
-		bool isDuplicated = false;
-		
-		int slot = SlotInfo[client].Slot;
-		
-		for(int i = 0; i < 3; i++)
+	switch(action)
+	{
+		case MenuAction_Select : 
 		{
-			if(	OriginalLook[client][i][GCLASS].Index == index ||
-				OriginalLook[client][i][GCLASS].RentalIndex == index ||
-				GiveLook[client][i][GCLASS] == index)
+			char info[32];
+			GetMenuItem(menu, select, info, sizeof(info));
+		
+			int index = StringToInt(info);
+			bool isDuplicated = false;
+		
+			int slot = SlotInfo[client].Slot;
+		
+			for(int i = 0; i < 3; i++)
 			{
-				isDuplicated = true;
+				if(	OriginalLook[client][i][GCLASS].Index == index ||
+					OriginalLook[client][i][GCLASS].RentalIndex == index ||
+					GiveLook[client][i][GCLASS] == index)
+				{
+					isDuplicated = true;
+				}
+			}
+		
+			if(isDuplicated)
+			{
+				PrintToChat(client, "중복해서 장식을 착용할 수 없습니다.");
+			}
+			else
+			{
+				PrintToChat(client, "재보급시, 해당 장식이 착용됩니다.");
+				OriginalLook[client][slot][GCLASS].RentalIndex = index;
+				GiveLook[client][slot][GCLASS] = index;
+			}
+		
+			SlotInfo[client].Init();
+		}
+		case MenuAction_Cancel :
+		{
+			switch(select)
+			{
+				case MenuCancel_Disconnected :
+				{
+					SlotInfo[client].Init();
+					PrintToChat(client, "클라이언트 연결 끊김");
+				}
+				case MenuCancel_Interrupted :
+				{
+					PrintToChat(client, "인터셉트");
+				}
+				case MenuCancel_Exit :
+				{
+					SlotInfo[client].Init();
+					PrintToChat(client, "메뉴나감");
+				}
+				case MenuCancel_NoDisplay :
+				{
+					//SlotInfo[client].Init();
+					PrintToChat(client, "노디스플레이");
+				}
+				case MenuCancel_Timeout :
+				{
+					SlotInfo[client].Init();
+					PrintToChat(client, "타임아웃");
+				}
+				case MenuCancel_ExitBack :
+				{
+					SlotInfo[client].Init();
+					PrintToChat(client, "메뉴뒤로가기");
+				}
 			}
 		}
-		
-		if(isDuplicated)
+		case MenuAction_End :
 		{
-			PrintToChat(client, "중복해서 장식을 착용할 수 없습니다.");
-		}
-		else
-		{
-			PrintToChat(client, "재보급시, 해당 장식이 착용됩니다.");
-			OriginalLook[client][slot][GCLASS].RentalIndex = index;
-			GiveLook[client][slot][GCLASS] = index;
+			CloseHandle(menu);
 		}
 	}
-	else if(action == MenuAction_End) CloseHandle(menu);
 }
 
 // ------------------------------------ 리젠 되었을때 ------------------------------------ //
@@ -728,6 +800,21 @@ stock bool IsValidClient(int client)
 	return IsClientInGame(client);
 }
 
+stock String_ToLower(const String:input[], String:output[], size)
+{
+	size--;
+
+	new x=0;
+	while (input[x] != '\0' && x < size) {
+
+		output[x] = CharToLower(input[x]);
+
+		x++;
+	}
+
+	output[x] = '\0';
+}
+
 // ------------------------------------ 리팩토링 필요 ------------------------------------ //
 stock void Fucca_ReplyToCommand(client, String:say[])
 { 
@@ -919,19 +1006,4 @@ public Action StyleMenu(int client, int args)
 	PrintToChat(client, "%s\x04스타일은 적용이 안될 수 있습니다.", FUCCA);
 	
 	return Plugin_Handled;
-}
-
-stock String_ToLower(const String:input[], String:output[], size)
-{
-	size--;
-
-	new x=0;
-	while (input[x] != '\0' && x < size) {
-
-		output[x] = CharToLower(input[x]);
-
-		x++;
-	}
-
-	output[x] = '\0';
 }
