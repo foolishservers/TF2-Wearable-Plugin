@@ -5,7 +5,6 @@
 #include <tf2attributes>
 #include <tf_econ_data>
 #include <tf2wearables>
-#include <localization_server>
 
 #define FUCCA "\x0700ccff[뿌까] "
 #define GCLASS TF2_GetPlayerClass(client)
@@ -18,7 +17,6 @@ enum struct Look
 {
 	int index;
 	char item_name[128];
-	char item_name_ko[128];
 }
 
 enum struct Paint
@@ -86,8 +84,32 @@ public Plugin myinfo =
 	url = "https://steamcommunity.com/id/ssssssaaaazzzzzxxc/"
 };
 
+public Extension:__ext_langparser = 
+{
+    name = "langparser",
+    file = "langparser.ext",
+#if defined AUTOLOAD_EXTENSIONS
+    autoload = 1,
+#else
+    autoload = 0,
+#endif
+};
+
+public Extension:__ext_LanguagePhrasesParser = 
+{
+    name = "LanguagePhrasesParser",
+    file = "LanguagePhrasesParser.ext",
+#if defined AUTOLOAD_EXTENSIONS
+    autoload = 1,
+#else
+    autoload = 0,
+#endif
+};
+
 public void OnPluginStart()
 {
+	LoadTranslations("tf.phrases");
+
 	LookList = new ArrayList(sizeof(Look));
 	LookMap = new StringMap();
 	PaintList = new ArrayList(sizeof(Paint));
@@ -122,7 +144,7 @@ public void OnConfigsExecuted()
 	{
 		do
 		{
-			char sidx[12], sItemName[128], sLocalizedItemName[128], sKoreanItemName[128];
+			char sidx[12], sItemName[128], sLocalizedItemName[128];
 			int idx;
 			
 			kvItems.GetSectionName(sidx, sizeof(sidx));
@@ -131,16 +153,16 @@ public void OnConfigsExecuted()
 			kvItems.GetString("name", sItemName, sizeof(sItemName), "");
 			TF2Econ_GetItemName(idx, sItemName, 128);
 			TF2Econ_GetLocalizedItemName(idx, sLocalizedItemName, 128);
-			LanguageServer_ResolveLocalizedString(GetLanguageByCode("ko"), sItemName, sKoreanItemName, 128);
+			
+			ReplaceString(sLocalizedItemName, sizeof(sLocalizedItemName), "#", "", false);
+			
+			String_ToLower(sLocalizedItemName, sLocalizedItemName, sizeof(sLocalizedItemName));
 			
 			Look look;			
 			look.index = idx;
-			look.item_name = sItemName;
-			look.item_name_ko = sKoreanItemName;
+			look.item_name = sLocalizedItemName;
 			
 			LookList.PushArray(look, sizeof(look));
-			
-			//PrintToServer("%s", look.item_name_ko);
 			
 			Format(sKey, 128, "%d_item_name", idx);
 			LookMap.SetValue(sKey, true);
@@ -225,7 +247,7 @@ public Action LookMenu(int client, int args)
 	for(int i = 0; i < 3; i++)
 	{
 		int id;
-		char info[64], hatName[64];
+		char sInfo[64], sItemName[128], sLocalizedItemName[128];
 
 		if(OriginalLook[client][i][GCLASS].RentalIndex <= 0)
 		{
@@ -233,23 +255,35 @@ public Action LookMenu(int client, int args)
 			
 			if(id)
 			{
-				TF2Econ_GetItemName(id, hatName, sizeof(hatName));
-				Format(info, sizeof(info), "%d;%d;%d", i, id, 0);
-				menu.AddItem(info, hatName);
+				Format(sInfo, sizeof(sInfo), "%d;%d;%d", i, id, 0);
+			
+				TF2Econ_GetLocalizedItemName(id, sLocalizedItemName, sizeof(sLocalizedItemName));
+				ReplaceString(sLocalizedItemName, sizeof(sLocalizedItemName), "#", "", false);
+				String_ToLower(sLocalizedItemName, sLocalizedItemName, sizeof(sLocalizedItemName));
+				
+				Format(sItemName, sizeof(sItemName), "%t", sLocalizedItemName);
+				
+				menu.AddItem(sInfo, sItemName);
 			}
 			else
 			{
-				Format(info, sizeof(info), "%d;%d;%d", i, 0, 0);
-				menu.AddItem(info, "- 비어 있음 -");
+				Format(sInfo, sizeof(sInfo), "%d;%d;%d", i, 0, 0);
+				menu.AddItem(sInfo, "- 비어 있음 -");
 			}
 		}
 		else
 		{
 			id = OriginalLook[client][i][GCLASS].RentalIndex;
-			TF2Econ_GetItemName(id, hatName, sizeof(hatName));
-			Format(hatName, sizeof(hatName), "%s [대여중]", hatName);
-			Format(info, sizeof(info), "%d;%d;%d", i, id, 1);
-			menu.AddItem(info, hatName);
+			
+			Format(sInfo, sizeof(sInfo), "%d;%d;%d", i, id, 1);
+			
+			TF2Econ_GetLocalizedItemName(id, sLocalizedItemName, sizeof(sLocalizedItemName));
+			ReplaceString(sLocalizedItemName, sizeof(sLocalizedItemName), "#", "", false);
+			String_ToLower(sLocalizedItemName, sLocalizedItemName, sizeof(sLocalizedItemName));
+			
+			Format(sItemName, sizeof(sItemName), "%t [대여중]", sLocalizedItemName);
+			
+			menu.AddItem(sInfo, sItemName);
 		}
 	}
  
@@ -268,35 +302,40 @@ public Slot_Select(Menu previousMenu, MenuAction action, int client, int select)
 		{
 			Menu menu = CreateMenu(Slot_Setting);
 		
-			char info[64], infoSplit[3][16], hatName[64];
+			char sInfo[64], sInfoSplit[3][16], sItemName[128], sLocalizedItemName[128];
 		
-			GetMenuItem(previousMenu, select, info, sizeof(info));
+			GetMenuItem(previousMenu, select, sInfo, sizeof(sInfo));
 		
-			ExplodeString(info, ";", infoSplit, sizeof(infoSplit), sizeof(infoSplit[]));
+			ExplodeString(sInfo, ";", sInfoSplit, sizeof(sInfoSplit), sizeof(sInfoSplit[]));
 		
-			int slot = StringToInt(infoSplit[0]);
-			int id = StringToInt(infoSplit[1]);
-			bool isRent = (StringToInt(infoSplit[2]) > 0);
+			int slot = StringToInt(sInfoSplit[0]);
+			int id = StringToInt(sInfoSplit[1]);
+			bool isRent = (StringToInt(sInfoSplit[2]) > 0);
 		
 			PrintToChat(client, "Slot Select %d %d %d", slot, id, isRent);
 		
 			if(id > 0)
 			{
-				TF2Econ_GetItemName(id, hatName, sizeof(hatName));
-				if(!isRent) menu.SetTitle("\"%s\" 장식 설정", hatName);
-				else menu.SetTitle("\"%s [대여중]\" 장식 설정", hatName);
+				TF2Econ_GetLocalizedItemName(id, sLocalizedItemName, sizeof(sLocalizedItemName));
+				ReplaceString(sLocalizedItemName, sizeof(sLocalizedItemName), "#", "", false);
+				String_ToLower(sLocalizedItemName, sLocalizedItemName, sizeof(sLocalizedItemName));
+				
+				if(!isRent) Format(sItemName, sizeof(sItemName), "\"%t\" 장식 설정", sLocalizedItemName);
+				else Format(sItemName, sizeof(sItemName), "\"%t [대여중]\" 장식 설정", sLocalizedItemName);
+				
+				menu.SetTitle("%s", sItemName);
 			}
 			else
 			{
-				menu.SetTitle("\"-비어 있음-\" 장식 설정", hatName);
+				menu.SetTitle("\"-비어 있음-\" 장식 설정", sItemName);
 			}
 			
-			menu.AddItem(info, "대여");
-			menu.AddItem(info, "언유");
-			menu.AddItem(info, "페인트");
+			menu.AddItem(sInfo, "대여");
+			menu.AddItem(sInfo, "언유");
+			menu.AddItem(sInfo, "페인트");
 		
-			if(isRent) menu.AddItem(info, "삭제");
-			else menu.AddItem(info, "삭제", ITEMDRAW_DISABLED);
+			if(isRent) menu.AddItem(sInfo, "삭제");
+			else menu.AddItem(sInfo, "삭제", ITEMDRAW_DISABLED);
 		
 			menu.ExitBackButton = true;
 		
@@ -371,8 +410,6 @@ public void Look_Search(int client)
 {
 	char SearchWord[32], SearchValue, sIndex[12], sItemName[128];
 	
-	int LanguageNum = GetClientLanguage(client);
-	
 	GetCmdArgString(SearchWord, sizeof(SearchWord));
 	Menu menu = new Menu(Look_Select);
 
@@ -385,7 +422,7 @@ public void Look_Search(int client)
 	
 		IntToString(look.index, sIndex, 12);
 		
-		sItemName = (strlen(look.item_name_ko) > 0 && LanguageNum == 15) ? look.item_name_ko : look.item_name;
+		Format(sItemName, sizeof(sItemName), "%t", look.item_name); 
 		
 		if(StrContains(sItemName, SearchWord, false) > -1)
 		{
@@ -882,4 +919,19 @@ public Action StyleMenu(int client, int args)
 	PrintToChat(client, "%s\x04스타일은 적용이 안될 수 있습니다.", FUCCA);
 	
 	return Plugin_Handled;
+}
+
+stock String_ToLower(const String:input[], String:output[], size)
+{
+	size--;
+
+	new x=0;
+	while (input[x] != '\0' && x < size) {
+
+		output[x] = CharToLower(input[x]);
+
+		x++;
+	}
+
+	output[x] = '\0';
 }
