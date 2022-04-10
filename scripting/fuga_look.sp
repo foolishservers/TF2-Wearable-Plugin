@@ -89,7 +89,6 @@ ArrayList PaintList;
 
 MenuSlotInfo SlotInfo[MAXPLAYERS+1];
 
-StringMap LookMap;
 int MaxItem_Look;
 
 int GiveLook[MAXPLAYERS+1][3][10];
@@ -116,7 +115,6 @@ public void OnPluginStart()
 	LoadTranslations("tf.phrases");
 
 	LookList = new ArrayList(sizeof(Look));
-	LookMap = new StringMap();
 	PaintList = new ArrayList(sizeof(Paint));
 
 	InitCommand();
@@ -131,14 +129,13 @@ public void OnPluginStart()
 
 public void OnConfigsExecuted()
 {	
-	LoadItemConfig();
+	LoadMiscItem();
 	LoadPaintConfig();
 }
 
 public void OnMapEnd()
 {
 	LookList.Clear();
-	LookMap.Clear();
 	PaintList.Clear();
 }
 

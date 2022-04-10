@@ -1,56 +1,65 @@
-public void LoadItemConfig()
-{
-	KeyValues kvItems;
-	char sPath[192], sKey[128];
-	int count = 0;
-	
-	BuildPath(Path_SM, sPath, sizeof(sPath), "configs/wearables/item.cfg");
-	
-	kvItems = CreateKeyValues("items");
-	FileToKeyValues(kvItems, sPath);
+int g_iMiscSlot = -1;
 
-	if(KvGotoFirstSubKey(kvItems))
+public void LoadMiscItem() 
+{
+	g_iMiscSlot = TF2Econ_TranslateLoadoutSlotNameToIndex("misc");
+	
+	if (g_iMiscSlot == -1) 
 	{
-		do
-		{
-			char sidx[12], sItemName[128], sLocalizedItemName[128];
-			int idx;
-			
-			kvItems.GetSectionName(sidx, sizeof(sidx));
-			idx = StringToInt(sidx);
-			
-			kvItems.GetString("name", sItemName, sizeof(sItemName), "");
-			TF2Econ_GetItemName(idx, sItemName, 128);
-			TF2Econ_GetLocalizedItemName(idx, sLocalizedItemName, 128);
-			
-			ReplaceString(sLocalizedItemName, sizeof(sLocalizedItemName), "#", "", false);
-			
-			String_ToLower(sLocalizedItemName, sLocalizedItemName, sizeof(sLocalizedItemName));
-			
-			Look look;			
-			look.index = idx;
-			look.item_name = sLocalizedItemName;
-			
-			LookList.PushArray(look, sizeof(look));
-			
-			Format(sKey, 128, "%d_item_name", idx);
-			LookMap.SetValue(sKey, true);
-			
-			count++;
-		}
-		while(KvGotoNextKey(kvItems));
+		SetFailState("Failed to determine index for slot name '%s'", "misc");
+		return;
 	}
 	
-	CloseHandle(kvItems);
+	char sIdx[32], sLocalizedItemName[128];
 	
-	MaxItem_Look = count;
-	LogMessage("Look Max Item : %d", MaxItem_Look);
+	StringMap miscMap = new StringMap();
+	
+	for(int TFClass = 1; TFClass < 10; TFClass++)
+	{
+		ArrayList miscList = TF2Econ_GetItemList(FilterClassMisc, view_as<TFClassType>(TFClass));
+		
+		for (int i = 0; i < miscList.Length; i++)
+		{
+			int defindex = miscList.Get(i);
+		
+			Format(sIdx, sizeof(sIdx), "%d", defindex);
+			
+			TF2Econ_GetLocalizedItemName(defindex, sLocalizedItemName, sizeof(sLocalizedItemName));
+			ReplaceString(sLocalizedItemName, sizeof(sLocalizedItemName), "#", "", false);
+			String_ToLower(sLocalizedItemName, sLocalizedItemName, sizeof(sLocalizedItemName));
+		
+			miscMap.SetString(sIdx, sLocalizedItemName);
+		}
+		delete miscList;
+	}
+	
+	StringMapSnapshot snapMiscMap = miscMap.Snapshot();
+	
+	for (int i = 0; i < snapMiscMap.Length; i++)
+	{
+		snapMiscMap.GetKey(i, sIdx, sizeof(sIdx));
+		miscMap.GetString(sIdx, sLocalizedItemName, sizeof(sLocalizedItemName));
+		
+		Look look;			
+		look.index = StringToInt(sIdx);
+		look.item_name = sLocalizedItemName;
+		
+		LookList.PushArray(look, sizeof(look));
+	}
+	
+	delete snapMiscMap;
+	delete miscMap;
+}
+
+bool FilterClassMisc(int defindex, TFClassType playerClass)
+{
+	return TF2Econ_GetItemLoadoutSlot(defindex, playerClass) == g_iMiscSlot;
 }
 
 public void LoadPaintConfig()
 {
 	KeyValues kvItems;
-	char sPath[192], sKey[128];
+	char sPath[192];
 	int count = 0;
 
 	BuildPath(Path_SM, sPath, sizeof(sPath), "configs/wearables/paint.cfg");

@@ -182,19 +182,22 @@ public void Menu_ItemSearch(int client, char[] searchWord)
 
 	menu.SetTitle("대여 장식 검색\n채팅에 장식 이름 입력", client);
 	
-	for(int i = 0 ; i < MaxItem_Look ; i++)
+	for(int i = 0 ; i < LookList.Length ; i++)
 	{
 		Look look;
 		LookList.GetArray(i, look, sizeof(look));
 	
-		IntToString(look.index, sIndex, 12);
-		
-		Format(sItemName, sizeof(sItemName), "%t", look.item_name); 
-		
-		if(StrContains(sItemName, searchWord, false) > -1)
+		if(StrContains(look.item_name, "tf_gatebot", false) == -1)
 		{
-			menu.AddItem(sIndex, sItemName);
-			SearchValue++;
+			IntToString(look.index, sIndex, 12);
+			
+			Format(sItemName, sizeof(sItemName), "%t", look.item_name); 
+		
+			if(StrContains(sItemName, searchWord, false) > -1)
+			{
+				menu.AddItem(sIndex, sItemName);
+				SearchValue++;
+			}
 		}
 	}
 	
