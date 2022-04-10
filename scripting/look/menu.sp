@@ -13,8 +13,16 @@ public void Menu_ItemSlot(int client)
 		{
 			id = OriginalLook[client][i][GCLASS].Index;
 			
-			if(id)
+			if(id == 65535)
 			{
+				PrintToChatAll("!!!65535 뜸!!!");
+				InitOriginalLook(client);
+			}
+			
+			if(id)
+			{	
+				PrintToChatAll("%N %d %d %d", client, i, id, 0);
+			
 				Format(sInfo, sizeof(sInfo), "%d;%d;%d", i, id, 0);
 			
 				TF2Econ_GetLocalizedItemName(id, sLocalizedItemName, sizeof(sLocalizedItemName));
@@ -223,21 +231,31 @@ public Select_ItemSearch(Menu menu, MenuAction action, int client, int select)
 			GetMenuItem(menu, select, info, sizeof(info));
 		
 			int index = StringToInt(info);
-			bool isDuplicated = false;
-		
 			int slot = SlotInfo[client].Slot;
 		
+			int curentSlot[3];
+
 			for(int i = 0; i < 3; i++)
 			{
-				if(	OriginalLook[client][i][GCLASS].Index == index ||
-					OriginalLook[client][i][GCLASS].RentalIndex == index ||
-					GiveLook[client][i][GCLASS] == index)
+				curentSlot[i] = (OriginalLook[client][i][GCLASS].RentalIndex > 0) ? OriginalLook[client][i][GCLASS].RentalIndex : OriginalLook[client][i][GCLASS].Index;
+			}
+			
+			curentSlot[slot] = index;
+			
+			bool isRepetition = false;
+			
+			for(int i = 0 ; i < 3; i++)
+			{
+				if(slot != i && curentSlot[slot] == curentSlot[i])
 				{
-					isDuplicated = true;
+					isRepetition = true;
+					break;
 				}
 			}
-		
-			if(isDuplicated)
+			
+			PrintToChat(client, "%d %d %d", curentSlot[0], curentSlot[1], curentSlot[2]);
+			
+			if(isRepetition)
 			{
 				PrintToChat(client, "중복해서 장식을 착용할 수 없습니다.");
 			}

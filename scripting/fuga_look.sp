@@ -4,7 +4,7 @@
 #include <tf2items>
 #include <tf2attributes>
 #include <tf_econ_data>
-#include <tf2wearables>
+#include <tf2utils>
 
 public Extension:__ext_langparser = 
 {
@@ -89,8 +89,6 @@ ArrayList PaintList;
 
 MenuSlotInfo SlotInfo[MAXPLAYERS+1];
 
-int MaxItem_Look;
-
 int GiveLook[MAXPLAYERS+1][3][10];
 Wearable OriginalLook[MAXPLAYERS+1][3][10];
 
@@ -141,11 +139,11 @@ public void OnMapEnd()
 
 public void OnClientPutInServer(int client)
 {
-	for(int i = 0; i <= 2; i++)
+	for(int i = 0; i < 3; i++)
 	{
 		StyleLook[client][i] = 0.0;
 	
-		for(int j = 0; j <= 9; j++)
+		for(int j = 0; j < 10; j++)
 		{
 			GiveLook[client][i][j] = 0;
 			OriginalLook[client][i][j].Init();
@@ -190,13 +188,6 @@ public Action inven(Event event, const char[] name, bool dontBroadcast)
 		}
 	}
 }
-
-/*
-public Action TF2Items_OnGiveNamedItem(int client, char[] szClassName, int index, Handle &hItem)
-{
-	return Plugin_Continue;   
-}
-*/
 
 // ------------------------------------ 리팩토링 필요 ------------------------------------ //
 stock void Fucca_ReplyToCommand(client, String:say[])

@@ -1,35 +1,23 @@
 public void InitOriginalLook(int client)
 {
-	int hat = -1, slot = 0;
-	
-	for(slot = 0; slot < 3; slot++)
+	for(int slot = 0; slot < 3; slot++)
 	{
 		OriginalLook[client][slot][GCLASS].Init();
 	}
-	
-	slot = 0;
-	
-	while ((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) 
+
+	for (int i,n = TF2Util_GetPlayerWearableCount(client), slot = 0; i < n; i++)
 	{
-		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client))
+		int wearable = TF2Util_GetPlayerWearable(client, i);
+		int itemdef = TF2_GetItemDefinitionIndex(wearable);
+		
+		if (!IsWearableWeapon(itemdef) && OriginalLook[client][slot][GCLASS].IsEmpty()) 
 		{
-			int id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
-			
-			if (!IsWearableWeapon(id) && OriginalLook[client][slot][GCLASS].IsEmpty()) 
-			{
-				OriginalLook[client][slot][GCLASS].Index = id;	
-				
-				if(slot < 3)
-				{
-					slot++;
-				}
-			}
+			OriginalLook[client][slot][GCLASS].Index = itemdef;
+			slot++;
 		}
 	}
 	
-	slot = 0;
-	
-	for(slot = 0; slot < 3; slot++)
+	for(int slot = 0; slot < 3; slot++)
 	{
 		if(OriginalLook[client][slot][GCLASS].IsEmpty()) 
 		{
@@ -53,32 +41,29 @@ public bool IsOriginalLookNeedUpdate(int client)
 		}
 	}
 	
-	int hat = -1, id = -1;
-	while((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) 
+	for (int i,n = TF2Util_GetPlayerWearableCount(client); i < n; i++)
 	{
-		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client))
+		int wearable = TF2Util_GetPlayerWearable(client, i);
+		int itemdef = TF2_GetItemDefinitionIndex(wearable);
+		
+		if (!IsWearableWeapon(itemdef)) 
 		{
-			id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
-			
-			if(!IsWearableWeapon(id))
+			if(OriginalLook[client][0][GCLASS].Index == itemdef)
 			{
-				if(OriginalLook[client][0][GCLASS].Index == id)
-				{
-					IsNeedUpdate[0] = false;
-				}
-			
-				if(OriginalLook[client][1][GCLASS].Index == id)
-				{
-					IsNeedUpdate[1] = false;
-				}
-			
-				if(OriginalLook[client][2][GCLASS].Index == id)
-				{
-					IsNeedUpdate[2] = false;
-				}
-				
-				HatCount++;
+				IsNeedUpdate[0] = false;
 			}
+			
+			if(OriginalLook[client][1][GCLASS].Index == itemdef)
+			{
+				IsNeedUpdate[1] = false;
+			}
+			
+			if(OriginalLook[client][2][GCLASS].Index == itemdef)
+			{
+				IsNeedUpdate[2] = false;
+			}
+			
+			HatCount++;
 		}
 	}
 	
@@ -121,7 +106,7 @@ stock bool TF2Item_GiveWearable(int client, int index, char[] att, float att2)
 	
 	delete item;
 	
-	TF2_EquipPlayerWearable(client, wearable);
+	TF2Util_EquipPlayerWearable(client, wearable);
 }
 
 stock void RemoveHat(int client, int index)
@@ -135,15 +120,14 @@ stock void RemoveHat(int client, int index)
 		}
 	}
 	
-	int hat = -1;
-	while ((hat = FindEntityByClassname(hat, "tf_wearable")) != -1) {
-		if ((hat != INVALID_ENT_REFERENCE) && (GetEntPropEnt(hat, Prop_Send, "m_hOwnerEntity") == client)) {
-			int id = GetEntProp(hat, Prop_Send, "m_iItemDefinitionIndex");
-			
-			if (id == OriginalLook[client][slot][GCLASS].Index)
-			{
-				AcceptEntityInput(hat, "Kill");
-			}
+	for (int i,n = TF2Util_GetPlayerWearableCount(client); i < n; i++)
+	{
+		int wearable = TF2Util_GetPlayerWearable(client, i);
+		int itemdef = TF2_GetItemDefinitionIndex(wearable);
+		
+		if (itemdef == OriginalLook[client][slot][GCLASS].Index)
+		{
+			AcceptEntityInput(wearable, "Kill");
 		}
 	}
 }
@@ -188,8 +172,13 @@ stock void Style(int entity, float att)
 stock bool IsWearableWeapon(int id)
 {
 	switch (id) {
-		case 133, 444, 405, 608, 231, 642:
+		case 133, 444, 405, 608, 231, 642, 
+			 241, 280, 281, 282, 283, 284, 286, 288, 362, 364, 365, 489, 493, 542, 1152, 30015, 
+			 1069, 1070, 1132, 5604, 
+			 30535, 536, 673, 5869 :
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -227,4 +216,9 @@ stock void String_ToLower(const char[] input, char[] output, size)
 	}
 
 	output[x] = '\0';
+}
+
+stock int TF2_GetItemDefinitionIndex(int entity)
+{
+	return GetEntProp(entity, Prop_Send, "m_iItemDefinitionIndex");
 }
